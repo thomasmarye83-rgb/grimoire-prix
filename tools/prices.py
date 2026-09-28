@@ -8,6 +8,7 @@ Sortie :
   meta.json            date de mise à jour, jour de départ, nombre de jours
   movers.json          plus fortes hausses et baisses (7 et 30 jours)
   latest.json          { clé : [prix, % 7 j, % 30 j, impressions, rang EDHREC, réserve, min 90 j, max 90 j] }
+  names.json           [[nom anglais, nom français?], …] pour le scanner
   s/<xx>.json          256 morceaux : { clé : { n: nom, p: [centimes|null,…], m: [impressions, rang EDHREC, réserve] } }
 La clé d'une carte = nom de la face avant, en minuscules, sans accents.
 Le morceau = FNV-1a 32 bits de la clé (UTF-8) modulo 256, en hexadécimal (même calcul côté appli).
@@ -80,7 +81,7 @@ def main():
     pr_fh = open_any(sys.argv[4]) if len(sys.argv) > 4 else fetch("AllPrices.json", tmp)
 
     # 1) Impressions papier -> clé de carte
-    uuid_key, names, meta = {}, {}, {}
+    uuid_key, names, meta, fr_names = {}, {}, {}, {}
     for uuid, c in iter_data(ids_fh):
         if c.get("isOnlineOnly") or c.get("isOversized") or c.get("isFunny") or c.get("isRebalanced") or c.get("layout") in SKIP_LAYOUTS or "paper" not in (c.get("availability") or ["paper"]):
             continue
@@ -89,6 +90,11 @@ def main():
             continue
         uuid_key[uuid] = k
         names.setdefault(k, c.get("name"))
+        if k not in fr_names:
+            for fd in c.get("foreignData") or []:
+                if fd.get("language") == "French" and fd.get("name"):
+                    fr_names[k] = fd.get("faceName") if " // " in (fd.get("name") or "") and fd.get("faceName") else fd["name"]
+                    break
         m = meta.setdefault(k, [0, None, 0])
         m[0] = max(m[0], len(c.get("printings") or []))
         r = c.get("edhrecRank")
@@ -221,6 +227,8 @@ def main():
         rows.sort(key=lambda x: x[field], reverse=rev)
         return rows[:40]
 
+    with open(os.path.join(out_dir, "names.json"), "w") as f:
+        json.dump([[names[k], fr_names.get(k)] if fr_names.get(k) else [names[k]] for k in sorted(names)], f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(out_dir, "latest.json"), "w") as f:
         json.dump(latest, f, ensure_ascii=False, separators=(",", ":"))
     with open(os.path.join(out_dir, "movers.json"), "w") as f:

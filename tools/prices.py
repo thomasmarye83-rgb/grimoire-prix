@@ -7,6 +7,7 @@ Sans fichiers donnés, télécharge AllIdentifiers et AllPrices sur mtgjson.com.
 Sortie :
   meta.json            date de mise à jour, jour de départ, nombre de jours
   movers.json          plus fortes hausses et baisses (7 et 30 jours)
+  latest.json          { clé : [prix, % 7 j, % 30 j, impressions, rang EDHREC, réserve] }
   s/<xx>.json          256 morceaux : { clé : { n: nom, p: [centimes|null,…], m: [impressions, rang EDHREC, réserve] } }
 La clé d'une carte = nom de la face avant, en minuscules, sans accents.
 Le morceau = FNV-1a 32 bits de la clé (UTF-8) modulo 256, en hexadécimal (même calcul côté appli).
@@ -195,7 +196,9 @@ def main():
                     j = ndays - 1 - n
                     return series[j] if j >= 0 else None
                 w7, w30 = ago(7), ago(30)
-                latest[k] = [last, round((last / w7 - 1) * 100, 1) if w7 else None, round((last / w30 - 1) * 100, 1) if w30 else None]
+                mm = meta.get(k) or (o or {}).get("m") or [0, None, 0]
+                latest[k] = [last, round((last / w7 - 1) * 100, 1) if w7 else None, round((last / w30 - 1) * 100, 1) if w30 else None,
+                             mm[0], mm[1], mm[2]]
             if last and last >= 200:
                 def back(n):
                     j = ndays - 1 - n

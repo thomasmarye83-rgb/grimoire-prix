@@ -1,0 +1,46 @@
+name: Prix Cardmarket (nuit)
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["tools/prices.py", ".github/workflows/prices.yml"]
+permissions:
+  contents: write
+concurrency:
+  group: prices
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Historique précédent
+        run: |
+          mkdir -p prev
+          if git fetch --depth=1 origin data; then git archive FETCH_HEAD | tar -x -C prev; fi
+          ls prev | head
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ijson
+      - name: Construire les prix
+        run: python3 tools/prices.py prev out
+      - name: Publier sur la branche data (remplacée chaque nuit, sans historique git)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          git init -q
+          git -c user.name="grimoire-prix" -c user.email="actions@users.noreply.github.com" add -A
+          git -c user.name="grimoire-prix" -c user.email="actions@users.noreply.github.com" commit -qm "Prix du $(date -u +%F)"
+          git push -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" HEAD:refs/heads/data
+      - name: Garder le calcul actif (GitHub coupe les tâches planifiées après 60 jours sans activité)
+        run: |
+          if [ "$(date -u +%d)" = "01" ]; then
+            date -u +%F > derniere-activite.txt
+            git -c user.name="grimoire-prix" -c user.email="actions@users.noreply.github.com" add derniere-activite.txt
+            git -c user.name="grimoire-prix" -c user.email="actions@users.noreply.github.com" commit -qm "Activité mensuelle" && git push origin HEAD:main || true
+          fi
